@@ -1,0 +1,109 @@
+* {
+    border: 0;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    background-image: linear-gradient(to left top, #051937, #004d7a, #008793, #00bf72, #a8eb12);
+    font-size: 16px;
+    height: 100vh;
+    width: 100vw;
+}
+main {
+    padding: 2em 5em;
+}
+
+#controls {
+    align-items: center;
+    display: flex;
+    font-family: monospace;
+    height: 30px;
+    gap: 10px;
+}
+
+#controls > time {
+    flex-shrink: 0;
+    text-align: right;
+}
+
+#controls-rail {
+    flex-grow: 1;
+    height: 100%;
+    position: relative;
+    width: 100%;
+}
+
+#controls-rail::before {
+    background-color: rgba(0, 0, 0, .15);
+    content: '';
+    display: block;
+    height: 4px;
+    position: absolute;
+    top: calc(50% - 2px);
+    width: 100%;
+}
+
+#controls-rail > div {
+    background-color: rgba(0, 0, 0, .3);
+    display: block;
+    height: 4px;
+    position: absolute;
+    top: calc(50% - 2px);
+    min-width: 1%;
+}
+
+#controls-rail > div::before {
+    background-color: rgba(0, 0, 0, 1);
+    border-radius: 50%;
+    content: '';
+    display: block;
+    height: 10px;
+    position: absolute;
+    right: 0;
+    top: calc(50% - 5px);
+    width: 10px;
+}
+
+#controls > button {
+    background-color: transparent;
+    cursor: pointer;
+    font-size: 1.5rem;
+}
+
+#segments {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 0.4rem;
+    margin-top: 2rem;
+    min-height: 10rem;
+}
+
+.exploding, .exploding:focus, .exploding:hover {
+    background: transparent;
+    color: transparent;
+}
+
+.exploding {
+    pointer-events: none;
+    position: relative;
+    will-change: transform;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+}
+
+.particle {
+    position: absolute;
+    top: 0;
+    left: 0;
+}
+
+.particle--debris {
+    background: #255ff4;
+}
+
+.particle--fire {
+    border-radius: 50%;
+}

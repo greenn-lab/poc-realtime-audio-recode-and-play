@@ -1,68 +1,193 @@
-const context = new AudioContext()
-const audio = document.querySelector('audio')
-document.body.append(audio)
+const JUMP_SECONDS = 2
 
-const chunkSize = 16384
+const recordContext = new AudioContext()
+let streamContext
+let started
+let recording
+
+let sum = new ArrayBuffer(0)
+
+const controls = document.getElementById('controls')
+const time = controls.querySelector('time')
+const peak = controls.querySelector('#controls-rail > div')
+setInterval(() => {
+  peak.style.width = '100%'
+  time.textContent = timeFormatter(recordContext.currentTime)
+}, 1000)
+
+
+const segments = document.getElementById('segments')
+const template = document.createElement('li')
+template.innerHTML = '<time></time><time></time><p contentEditable="true"></p>'
+
+const movement = (seconds, target) => {
+  if (recorder?.state !== 'recording') return explode(target)
+}
+
+document.getElementById('move-5')
+  .addEventListener('click', ({target}) => movement(-5, target))
+document.getElementById('move+5')
+  .addEventListener('click', ({target}) => movement(+5, target))
+
+window.addEventListener('keyup', async ({key}) => {
+  if (key === 'ArrowLeft') {
+    if (!started) {
+      started = recordContext.currentTime
+    }
+    else {
+      started += streamContext.currentTime
+    }
+
+    if (started - JUMP_SECONDS < 0) {
+      started = 0
+    }
+    else {
+      started -= JUMP_SECONDS
+    }
+
+    await play(started)
+  }
+  else if (key === 'ArrowRight') {
+    if (started) {
+      started += streamContext.currentTime
+
+      if (started + JUMP_SECONDS >= recordContext.currentTime) {
+        await streamContext.close()
+      }
+      else {
+        await play(started += JUMP_SECONDS)
+      }
+    }
+  }
+})
+
+let playTimer
+
+async function play(seconds) {
+  let duration = 0
+  let start
+
+  const index = chunks.findIndex(audio => {
+    duration += audio.duration
+    return duration > seconds && (start = audio.duration - (duration - seconds)) >= 0
+  })
+
+  if (index < 0) {
+    console.debug('not ready for play ', seconds, chunks)
+
+    await recorder.stop()
+    await recorder.start()
+
+    clearTimeout(playTimer)
+    playTimer = setTimeout(() => {
+      play(seconds)
+    }, 100)
+    return
+  }
+
+  console.log('play', seconds, index, start)
+
+  if (streamContext?.state === 'running') {
+    await streamContext.close()
+  }
+
+  streamContext = new AudioContext()
+  let source = streamContext.createBufferSource()
+  source.buffer = chunks[index]
+  source.connect(streamContext.destination)
+  source.start(start)
+  source.onended = async () => {
+    console.log('onended', streamContext.currentTime, started)
+    await play(started + streamContext.currentTime + 0.01)
+  }
+}
+
+/*
+const url = `wss://ailab.sorizava.co.kr:40002/client/ws/speech`
+const params = {
+  'model': 'KOREAN_ONLINE_16K',
+  'content-type': 'audio%2Fx-raw%2C+layout%3D%28string%29interleaved%2C+rate%3D%28int%2916000%2C+format%3D%28string%29S16LE%2C+channels%3D%28int%291',
+  'project': '2e77c961-f709-400a-8c3e-0eeb73604698',
+  'access-token': 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJjcmV0RHQiOjE2NzI4MTM4MjYxNTQsImNyZXRyIjoiYWRtaW4iLCJjaGdEdCI6MTY3NzQ2NDk2NTg2NCwiY2hnciI6ImFkbWluIiwibWVtTm8iOjgsIm1lbUlkIjoidGVzdDEiLCJwYXNzd2QiOiIyMzEyNTJhZjIxN2I2NTZhNGQ4OGYwYzJkMmE5ZTc3MzE2M2QxN2MxYmJjMDIxMWI1NTJiYzc4OTg4M2RmMWU1ZjFlMTg5NTRmYTMwZTZkNGM2OWQyNmU0Nzc1MTUzNjE5YzdkOGIyN2U4ZjZiNjJhYTAyNmFkYzYwZDczNjZhYiIsIm1lbU5tIjoi7YWM7Iqk7Yq4IiwidXNlWW4iOiJZIiwiZW1haWwiOiJ0ZXN0QHRlc3QuY29tIiwiYXV0aE5vIjoxMSwiZGVwdE5vIjoxLCJqaWt3aUNkIjoiQ0QwNSIsImR1dHlDZCI6IkNEMDEiLCJqb2IiOiIiLCJ0ZWwiOiIiLCJsb2dpbkZhaWwiOjAsIm5vd0R0IjoxNjc3OTQyNzA5OTE1LCJleHBEdCI6MTY3ODAyOTEwOTkxNSwiZXhwU2VjIjo4NjQwMCwiZXhwIjoxNjc4MDI5MTA5fQ.8HBt9oKvMAQdMkS6WpCdxN5txXoWmDcAOWVAj3W11jw',
+}
+const query = Object.keys(params).reduce((a, b) => a + '&' + b + '=' + params[b], '')
+
+const ws = new WebSocket(`${url}?single=false${query}`, [], )
+ws.addEventListener('message', function({data}) {
+  console.info(JSON.parse(data))
+  const {segment: index, result} = JSON.parse(data)
+
+  if (index) {
+    let segment = segments.querySelector(`#segment-${index}`)
+    if (!segment) {
+      segment = template.cloneNode(true)
+      segment.id = `segment-${index}`
+      segments.append(segment)
+    }
+
+    const time = segment.querySelectorAll('time')
+    segment.querySelector('p').textContent = result.hypotheses?.transcript
+  }
+}
+ws.addEventListener('close', () => ws.CLOSED)
+*/
+
 let chunks = []
 let recorder
 
-navigator.mediaDevices.getUserMedia({audio: true}).then(
-  async (stream) => {
-    await context.resume()
+window.addEventListener('DOMContentLoaded', async () => {
+  let stream
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({audio: true})
+    await recordContext.resume()
+  }
+  catch (e) {
+    explode(document.querySelector('#controls > time'))
+    throw new Error(e)
+  }
 
-    const source = context.createMediaStreamSource(stream)
-    const processor = context.createScriptProcessor(8192, 1, 1)
+  const source = recordContext.createMediaStreamSource(stream)
+  visualize(source)
 
-    source.connect(processor)
-    processor.connect(context.destination)
+  const processor = recordContext.createScriptProcessor(4096, 1, 1)
 
-    visualize(source)
-
-
-    const ws = new WebSocket('wss://ailab.sorizava.co.kr:40002/client/ws/speech?single=false&model=KOREAN_ONLINE_16K')
-
-    let sessionId
-    let groupId
-    let workerId
-
-    ws.onmessage = (e) => {
-      console.log('ws.onmessage', e)
-
-      try {
-        const result = JSON.parse(e.data)
-        sessionId = result.sessionId
-        groupId = result.groupId
-        workerId = result.workerId
-      } catch (ex) {
-        console.error(ex)
-      }
-    }
-
-    ws.binaryType = 'blob'
-
-    processor.addEventListener('audioprocess', (e) => {
+  source.connect(processor)
+  processor.connect(recordContext.destination)
+  processor.addEventListener('audioprocess', () => {
+    /*if (ws.readyState < 2) {
       const data = e.inputBuffer.getChannelData(0)
+      ws.readyState < 2 && ws.send(float32ToInt16(data));
+    }*/
+  })
 
-      let converted = convertFloat32ToInt16(data);
-
-      ws.send(converted);
-    })
-
-    recorder = new MediaRecorder(stream)
-    recorder.addEventListener('dataavailable', (e) => {
-      chunks.push(e.data)
-
-      // process
-      const total = chunks.reduce((a, b) => a += b.size, 0)
-      if (total > chunkSize) {
-        const blob = new Blob(chunks, {type: 'audio/wav'})
-        audio.src = window.URL.createObjectURL(blob)
-      }
+  recorder = new MediaRecorder(stream)
+  recorder.addEventListener('dataavailable', async ({data}) => {
+    const buffer = await data.arrayBuffer()
+    sum = concatArrayBuffer(sum, buffer)
+    await recordContext.decodeAudioData(buffer, audioBuffer => {
+      chunks.push(audioBuffer)
+      recording = false
     })
   })
 
+  recorder.start()
+  segments.before(new Date().toString())
+})
+
+
+function float32ToInt16(buffer) {
+  let len = buffer.length
+  const buf = new Int16Array(len)
+
+  while (len--) {
+    buf[len] = Math.min(1, buffer[len]) * 0x7fff
+  }
+
+  return buf
+}
+
 function visualize(source) {
-  const analyser = context.createAnalyser()
+  const analyser = recordContext.createAnalyser()
   analyser.fftSize = 2048
   const bufferLength = analyser.frequencyBinCount
   const dataArray = new Uint8Array(bufferLength)
@@ -74,27 +199,28 @@ function visualize(source) {
   draw()
 
   function draw() {
-    const WIDTH = canvas.width
-    const HEIGHT = canvas.height
+    const width = canvas.width
+    const height = canvas.height
 
     requestAnimationFrame(draw)
 
     analyser.getByteTimeDomainData(dataArray)
 
-    canvasCtx.fillStyle = 'rgb(255, 255, 255)'
-    canvasCtx.fillRect(0, 0, WIDTH, HEIGHT)
+    // canvasCtx.fillStyle = 'rgb(255, 255, 255)'
+    // canvasCtx.fillRect(0, 0, WIDTH, HEIGHT)
+    canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
 
-    canvasCtx.lineWidth = 1
-    canvasCtx.strokeStyle = 'rgb(0, 0, 0)'
+    canvasCtx.lineWidth = 3
+    canvasCtx.strokeStyle = 'rgb(255, 255, 255)'
 
     canvasCtx.beginPath()
 
-    let sliceWidth = WIDTH / bufferLength
+    let sliceWidth = width / bufferLength
     let x = 0
 
     for (let i = 0; i < bufferLength; i++) {
       let v = dataArray[i] / 128.0
-      let y = (v * HEIGHT) / 2
+      let y = (v * height) / 2
 
       if (i === 0) {
         canvasCtx.moveTo(x, y)
@@ -106,32 +232,29 @@ function visualize(source) {
       x += sliceWidth
     }
 
-    canvasCtx.lineTo(WIDTH, HEIGHT / 2)
+    canvasCtx.lineTo(width, height / 2)
     canvasCtx.stroke()
   }
 }
 
-function convertFloat32ToInt16(buffer) {
-  let len = buffer.length
-  const buf = new Int16Array(len)
+function timeFormatter(time) {
+  const seconds = Math.round(time % 60)
+  const minutes = Math.floor(time / 60) % 60
+  const formatted = [
+    String(minutes).padStart(2, '0'),
+    String(seconds).padStart(2, '0')
+  ]
 
-  while (len--) {
-    buf[len] = Math.min(1, buffer[len]) * 0x7fff
-  }
+  const hours = Math.floor(time / 3600)
+  if (hours) formatted.unshift(String(hours))
 
-  return buf
+  return formatted.join(':');
 }
 
-const btn = document.createElement('button')
-btn.textContent = 'record'
-btn.addEventListener('click', () => {
-  recorder.start();
-})
-document.body.append(btn)
+function concatArrayBuffer(buffer1, buffer2) {
+  const tmp = new Uint8Array(buffer1.byteLength + buffer2.byteLength);
+  tmp.set(new Uint8Array(buffer1), 0);
+  tmp.set(new Uint8Array(buffer2), buffer1.byteLength);
 
-document.body.addEventListener('keyup', ({key}) => {
-  if (key === 'ArrowLeft') {
-    recorder.stop()
-    recorder.start()
-  }
-})
+  return tmp.buffer;
+}
