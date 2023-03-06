@@ -68,6 +68,7 @@ window.addEventListener('keyup', async ({key}) => {
 })
 
 let playTimer
+
 async function play(seconds) {
   console.log('play', seconds)
 
@@ -141,7 +142,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       URL.revokeObjectURL(target.src)
       a?.nextElementSibling?.play?.()
     }
-    a.ontimeupdate = async function({target}) {
+    a.ontimeupdate = async function ({target}) {
       if (target.nextElementSibling.tagName !== 'AUDIO' && target.duration - 1 < target.currentTime) {
         await recorder.stop()
         await recorder.start()
@@ -160,26 +161,28 @@ window.addEventListener('DOMContentLoaded', async () => {
   recorder.start()
   segments.before(new Date().toString())
 
-  /*
-    ws = new WebSocket(`${url}?single=false${query}`, [],)
-    ws.addEventListener('message', function ({data}) {
-      console.info(JSON.parse(data))
-      const {segment: index, result} = JSON.parse(data)
+  ws = new WebSocket(`${url}?single=false${query}`, [],)
+  ws.addEventListener('message', function ({data}) {
+    const {segment: index, result} = JSON.parse(data)
 
-      if (index) {
-        let segment = segments.querySelector(`#segment-${index}`)
-        if (!segment) {
-          segment = template.cloneNode(true)
-          segment.id = `segment-${index}`
-          segments.append(segment)
-        }
+    if (index) {
+      let segment = segments.querySelector(`#segment-${index}`)
+      if (!segment) {
+        segment = template.cloneNode(true)
+        segment.id = `segment-${index}`
+        segments.append(segment)
+      }
 
+      const hypotheses = result.hypotheses[0]
+      if (hypotheses) {
         const time = segment.querySelectorAll('time')
+        time[0].textContent = '--:--'
+        time[1].textContent = '--:--'
         segment.querySelector('p').textContent = result.hypotheses?.[0]?.transcript
       }
-    })
-    ws.addEventListener('close', () => ws.CLOSED)
-  */
+    }
+  })
+  ws.addEventListener('close', () => ws.CLOSED)
 })
 
 
