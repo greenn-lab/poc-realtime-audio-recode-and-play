@@ -27,80 +27,45 @@ main {
     gap: 10px;
 }
 
-time {
-    flex-shrink: 0;
-    font-family: monospace;
-    opacity: .5;
-    text-align: right;
-}
-time + time::before {
-    content: '~';
-}
-
-#segments {
-    flex-grow: 1;
-    list-style: none;
-}
-#segments > li {
-    display: flex;
-    padding: .6rem;
-}
-#segments p {
-    flex-grow: 1;
-    margin-left: 1rem;
-}
-
-
-#controls-rail {
-    flex-grow: 1;
-    height: 100%;
-    position: relative;
-    width: 100%;
-}
-
-#controls-rail::before {
-    background-color: rgba(0, 0, 0, .15);
-    content: '';
-    display: block;
-    height: 4px;
-    position: absolute;
-    top: calc(50% - 2px);
-    width: 100%;
-}
-
-#controls-rail > div {
-    background-color: rgba(0, 0, 0, .3);
-    display: block;
-    height: 4px;
-    position: absolute;
-    top: calc(50% - 2px);
-    min-width: 1%;
-}
-
-#controls-rail > div::before {
-    background-color: rgba(0, 0, 0, 1);
-    border-radius: 50%;
-    content: '';
-    display: block;
-    height: 10px;
-    position: absolute;
-    right: 0;
-    top: calc(50% - 5px);
-    width: 10px;
-}
-
-#controls > button {
-    background-color: transparent;
-    cursor: pointer;
-    font-size: 1.5rem;
-}
-
 #segments {
     background: rgba(255, 255, 255, 0.1);
     border-radius: 0.4rem;
+    flex-grow: 1;
+    list-style: none;
     margin-top: 1rem;
     overflow-y: auto;
 }
+#segments > li {
+    display: flex;
+    align-items: center;
+}
+#segments a {
+    text-align: right;
+    width: 11rem;
+}
+#segments a::after {
+    content: ' ▶️'
+}
+#segments time {
+    flex-shrink: 0;
+    font-family: 'Courier New', monospace;
+    opacity: .6;
+}
+#segments time + time::before {
+    content: '~';
+}
+
+#segments p {
+    border-radius: .25rem;
+    flex-grow: 1;
+    outline: none;
+    margin: 0.25rem;
+    padding: .5rem;
+}
+#segments p:focus {
+    background-color: rgba(255, 255, 255, .15);
+}
+
 
 .exploding, .exploding:focus, .exploding:hover {
     background: transparent;
