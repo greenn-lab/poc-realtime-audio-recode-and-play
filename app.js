@@ -30,6 +30,12 @@ document.getElementById('move+5')
   .addEventListener('click', ({target}) => movement(+5, target))
 
 window.addEventListener('keyup', async ({key}) => {
+  await recorder.stop()
+  await recorder.start()
+
+  await play(recordContext.currentTime - JUMP_SECONDS)
+  return;
+
   if (key === 'ArrowLeft') {
     if (!started) {
       started = recordContext.currentTime
@@ -62,47 +68,30 @@ window.addEventListener('keyup', async ({key}) => {
 })
 
 let playTimer
-
 async function play(seconds) {
-  let duration = 0
-  let start
+  console.log('play', seconds)
 
+  let length = 0
+  let started = 0
   const index = chunks.findIndex(audio => {
-    duration += audio.duration
-    return duration > seconds && (start = audio.duration - (duration - seconds)) >= 0
+    if ((length += audio.duration) > seconds) return true
+    started += audio.duration
+    return false
   })
 
-  if (index < 0) {
-    console.debug('not ready for play ', seconds, chunks)
-
-    await recorder.stop()
-    await recorder.start()
-
-    clearTimeout(playTimer)
+  clearTimeout(playTimer)
+  if (length === Infinity || index < 0) {
     playTimer = setTimeout(() => {
       play(seconds)
     }, 100)
+
     return
   }
 
-  console.log('play', seconds, index, start)
-
-  if (streamContext?.state === 'running') {
-    await streamContext.close()
-  }
-
-  streamContext = new AudioContext()
-  let source = streamContext.createBufferSource()
-  source.buffer = chunks[index]
-  source.connect(streamContext.destination)
-  source.start(start)
-  source.onended = async () => {
-    console.log('onended', streamContext.currentTime, started)
-    await play(started + streamContext.currentTime + 0.01)
-  }
+  chunks[index].currentTime = seconds - started
+  chunks[index].play()
 }
 
-/*
 const url = `wss://ailab.sorizava.co.kr:40002/client/ws/speech`
 const params = {
   'model': 'KOREAN_ONLINE_16K',
@@ -112,26 +101,7 @@ const params = {
 }
 const query = Object.keys(params).reduce((a, b) => a + '&' + b + '=' + params[b], '')
 
-const ws = new WebSocket(`${url}?single=false${query}`, [], )
-ws.addEventListener('message', function({data}) {
-  console.info(JSON.parse(data))
-  const {segment: index, result} = JSON.parse(data)
-
-  if (index) {
-    let segment = segments.querySelector(`#segment-${index}`)
-    if (!segment) {
-      segment = template.cloneNode(true)
-      segment.id = `segment-${index}`
-      segments.append(segment)
-    }
-
-    const time = segment.querySelectorAll('time')
-    segment.querySelector('p').textContent = result.hypotheses?.transcript
-  }
-}
-ws.addEventListener('close', () => ws.CLOSED)
-*/
-
+let ws
 let chunks = []
 let recorder
 
@@ -153,25 +123,63 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   source.connect(processor)
   processor.connect(recordContext.destination)
-  processor.addEventListener('audioprocess', () => {
-    /*if (ws.readyState < 2) {
-      const data = e.inputBuffer.getChannelData(0)
+  processor.addEventListener('audioprocess', ({inputBuffer}) => {
+    if (ws?.readyState < 2) {
+      const data = inputBuffer.getChannelData(0)
       ws.readyState < 2 && ws.send(float32ToInt16(data));
-    }*/
+    }
   })
 
   recorder = new MediaRecorder(stream)
   recorder.addEventListener('dataavailable', async ({data}) => {
-    const buffer = await data.arrayBuffer()
-    sum = concatArrayBuffer(sum, buffer)
-    await recordContext.decodeAudioData(buffer, audioBuffer => {
-      chunks.push(audioBuffer)
-      recording = false
-    })
+    const a = document.createElement('audio')
+    a.controls = true
+    const b = new Blob([data], {type: 'audio/wav'})
+    a.src = URL.createObjectURL(b)
+    a.onended = function ({target}) {
+      console.log('target', target)
+      URL.revokeObjectURL(target.src)
+      a?.nextElementSibling?.play?.()
+    }
+    a.ontimeupdate = async function({target}) {
+      if (target.nextElementSibling.tagName !== 'AUDIO' && target.duration - 1 < target.currentTime) {
+        await recorder.stop()
+        await recorder.start()
+      }
+    }
+    segments.before(a)
+    chunks.push(a)
+
+    // sum = concatArrayBuffer(sum, buffer)
+    // await recordContext.decodeAudioData(buffer, audioBuffer => {
+    //   chunks.push(audioBuffer)
+    //   recording = false
+    // })
   })
 
   recorder.start()
   segments.before(new Date().toString())
+
+  /*
+    ws = new WebSocket(`${url}?single=false${query}`, [],)
+    ws.addEventListener('message', function ({data}) {
+      console.info(JSON.parse(data))
+      const {segment: index, result} = JSON.parse(data)
+
+      if (index) {
+        let segment = segments.querySelector(`#segment-${index}`)
+        if (!segment) {
+          segment = template.cloneNode(true)
+          segment.id = `segment-${index}`
+          segments.append(segment)
+        }
+
+        const time = segment.querySelectorAll('time')
+        segment.querySelector('p').textContent = result.hypotheses?.[0]?.transcript
+      }
+    })
+    ws.addEventListener('close', () => ws.CLOSED)
+  */
 })
 
 
