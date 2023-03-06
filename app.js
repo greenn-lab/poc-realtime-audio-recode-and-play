@@ -1,6 +1,6 @@
 const JUMP_SECONDS = 2
 
-const recordContext = new AudioContext()
+const recordContext = new AudioContext({sampleRate: Math.pow(2, 14), latencyHint: 'balanced'})
 let streamContext
 let started
 let recording
@@ -32,39 +32,6 @@ document.getElementById('move+5')
 window.addEventListener('keyup', async ({key}) => {
   await recorder.stop()
   await recorder.start()
-
-  await play(recordContext.currentTime - JUMP_SECONDS)
-  return;
-
-  if (key === 'ArrowLeft') {
-    if (!started) {
-      started = recordContext.currentTime
-    }
-    else {
-      started += streamContext.currentTime
-    }
-
-    if (started - JUMP_SECONDS < 0) {
-      started = 0
-    }
-    else {
-      started -= JUMP_SECONDS
-    }
-
-    await play(started)
-  }
-  else if (key === 'ArrowRight') {
-    if (started) {
-      started += streamContext.currentTime
-
-      if (started + JUMP_SECONDS >= recordContext.currentTime) {
-        await streamContext.close()
-      }
-      else {
-        await play(started += JUMP_SECONDS)
-      }
-    }
-  }
 })
 
 let playTimer
@@ -163,9 +130,10 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   ws = new WebSocket(`${url}?single=false${query}`, [],)
   ws.addEventListener('message', function ({data}) {
-    const {segment: index, result} = JSON.parse(data)
+    const {segment: index, 'segment-start': start, 'total-length': end, result} = JSON.parse(data)
+    console.log(JSON.parse(data))
 
-    if (index) {
+    if (index !== undefined) {
       let segment = segments.querySelector(`#segment-${index}`)
       if (!segment) {
         segment = template.cloneNode(true)
@@ -176,8 +144,8 @@ window.addEventListener('DOMContentLoaded', async () => {
       const hypotheses = result.hypotheses[0]
       if (hypotheses) {
         const time = segment.querySelectorAll('time')
-        time[0].textContent = '--:--'
-        time[1].textContent = '--:--'
+        time[0].textContent = result.final ? timeFormatter(start) : '--:--'
+        time[1].textContent = result.final ? timeFormatter(end) : '--:--'
         segment.querySelector('p').textContent = result.hypotheses?.[0]?.transcript
       }
     }
