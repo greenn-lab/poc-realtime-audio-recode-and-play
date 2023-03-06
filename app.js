@@ -1,38 +1,10 @@
-const JUMP_SECONDS = 2
+const SAMPLE_RATE = Math.pow(2, 14)
 
-const recordContext = new AudioContext({sampleRate: Math.pow(2, 14), latencyHint: 'balanced'})
-let streamContext
-let started
-let recording
-
-let sum = new ArrayBuffer(0)
-
-const controls = document.getElementById('controls')
-const time = controls.querySelector('time')
-const peak = controls.querySelector('#controls-rail > div')
-setInterval(() => {
-  peak.style.width = '100%'
-  time.textContent = timeFormatter(recordContext.currentTime)
-}, 1000)
-
+let recordContext
 
 const segments = document.getElementById('segments')
 const template = document.createElement('li')
-template.innerHTML = '<time></time><time></time><p contentEditable="true"></p>'
-
-const movement = (seconds, target) => {
-  if (recorder?.state !== 'recording') return explode(target)
-}
-
-document.getElementById('move-5')
-  .addEventListener('click', ({target}) => movement(-5, target))
-document.getElementById('move+5')
-  .addEventListener('click', ({target}) => movement(+5, target))
-
-window.addEventListener('keyup', async ({key}) => {
-  await recorder.stop()
-  await recorder.start()
-})
+template.innerHTML = '<time></time><time></time><button>▶️</button><p contentEditable="true"></p>'
 
 let playTimer
 
@@ -73,84 +45,80 @@ let ws
 let chunks = []
 let recorder
 
-window.addEventListener('DOMContentLoaded', async () => {
-  let stream
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({audio: true})
-    await recordContext.resume()
-  }
-  catch (e) {
-    explode(document.querySelector('#controls > time'))
-    throw new Error(e)
-  }
-
-  const source = recordContext.createMediaStreamSource(stream)
-  visualize(source)
-
-  const processor = recordContext.createScriptProcessor(4096, 1, 1)
-
-  source.connect(processor)
-  processor.connect(recordContext.destination)
-  processor.addEventListener('audioprocess', ({inputBuffer}) => {
-    if (ws?.readyState < 2) {
-      const data = inputBuffer.getChannelData(0)
-      ws.readyState < 2 && ws.send(float32ToInt16(data));
-    }
-  })
-
-  recorder = new MediaRecorder(stream)
-  recorder.addEventListener('dataavailable', async ({data}) => {
-    const a = document.createElement('audio')
-    a.controls = true
-    const b = new Blob([data], {type: 'audio/wav'})
-    a.src = URL.createObjectURL(b)
-    a.onended = function ({target}) {
-      console.log('target', target)
-      URL.revokeObjectURL(target.src)
-      a?.nextElementSibling?.play?.()
-    }
-    a.ontimeupdate = async function ({target}) {
-      if (target.nextElementSibling.tagName !== 'AUDIO' && target.duration - 1 < target.currentTime) {
-        await recorder.stop()
-        await recorder.start()
-      }
-    }
-    segments.before(a)
-    chunks.push(a)
-
-    // sum = concatArrayBuffer(sum, buffer)
-    // await recordContext.decodeAudioData(buffer, audioBuffer => {
-    //   chunks.push(audioBuffer)
-    //   recording = false
-    // })
-  })
-
-  recorder.start()
-  segments.before(new Date().toString())
-
-  ws = new WebSocket(`${url}?single=false${query}`, [],)
-  ws.addEventListener('message', function ({data}) {
-    const {segment: index, 'segment-start': start, 'total-length': end, result} = JSON.parse(data)
-    console.log(JSON.parse(data))
-
-    if (index !== undefined) {
-      let segment = segments.querySelector(`#segment-${index}`)
-      if (!segment) {
-        segment = template.cloneNode(true)
-        segment.id = `segment-${index}`
-        segments.append(segment)
+const btnRecord = document.getElementById('#record')
+btnRecord.addEventListener('click', () => {
+  navigator.mediaDevices.getUserMedia({audio: true})
+    .then(async (stream) => {
+      if (recordContext?.state === 'running') {
+        await recordContext.close()
       }
 
-      const hypotheses = result.hypotheses[0]
-      if (hypotheses) {
-        const time = segment.querySelectorAll('time')
-        time[0].textContent = result.final ? timeFormatter(start) : '--:--'
-        time[1].textContent = result.final ? timeFormatter(end) : '--:--'
-        segment.querySelector('p').textContent = result.hypotheses?.[0]?.transcript
+      recordContext = new AudioContext({sampleRate: SAMPLE_RATE, latencyHint: 'balanced'})
+      await recordContext.resume()
+
+      const source = recordContext.createMediaStreamSource(stream)
+      visualize(source)
+
+      const processor = recordContext.createScriptProcessor(4096, 1, 1)
+      source.connect(processor)
+      processor.connect(recordContext.destination)
+      processor.addEventListener('audioprocess', ({inputBuffer}) => {
+        if (ws?.readyState === 1) {
+          const data = inputBuffer.getChannelData(0)
+          ws.send(float32ToInt16(data));
+        }
+      })
+
+      recorder = new MediaRecorder(stream)
+      recorder.addEventListener('dataavailable', async ({data}) => {
+        chunks.push(data)
+      })
+      recorder.start()
+
+      if (ws?.readyState === 1) {
+        ws.send('EOS')
+        ws.close()
       }
-    }
-  })
-  ws.addEventListener('close', () => ws.CLOSED)
+
+      ws = new WebSocket(`${url}?single=false${query}`)
+      ws.addEventListener('message', function ({data}) {
+        const {
+          segment: index,
+          result: {
+            hypotheses,
+            final
+          },
+          'segment-start': start,
+          'total-length': end,
+        } = JSON.parse(data)
+        console.log(JSON.parse(data))
+
+        if (index !== undefined) {
+          let segment = segments.querySelector(`#segment-${index}`)
+          if (!segment) {
+            segment = template.cloneNode(true)
+            segment.id = `segment-${index}`
+            segments.append(segment)
+          }
+
+          if (final) {
+            recorder.stop()
+            recorder.start()
+          }
+
+          if (hypotheses) {
+            const [{ transcript }] = hypotheses
+            const time = segment.querySelectorAll('time')
+            time[0].textContent = timeFormatter(start)
+            time[1].textContent = timeFormatter(end)
+            segment.querySelector('p').textContent = transcript
+          }
+        }
+      })
+    })
+    .catch(() => {
+      explode(document.getElementById('#record'))
+    })
 })
 
 
@@ -217,7 +185,9 @@ function visualize(source) {
 }
 
 function timeFormatter(time) {
-  const seconds = Math.round(time % 60)
+  if (!time) return ''
+
+  const seconds = Math.floor(time % 60)
   const minutes = Math.floor(time / 60) % 60
   const formatted = [
     String(minutes).padStart(2, '0'),
