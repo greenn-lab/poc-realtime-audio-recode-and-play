@@ -17,9 +17,17 @@ let recorder
 let chunks = []
 let player
 let playerSource
+let segmentIndex = 0
 
 
 btnRecord.addEventListener('click', () => {
+  if (recordContext?.readyState === 'running') {
+    recordContext.close()
+    webSocket.send('EOS')
+    webSocket.close()
+    return
+  }
+
   navigator.mediaDevices.getUserMedia({audio: true})
     .then(async (stream) => {
       await streaming(stream)
@@ -32,10 +40,6 @@ btnRecord.addEventListener('click', () => {
 })
 
 const streaming = async (stream) => {
-  if (recordContext?.state === 'running') {
-    await recordContext.close()
-  }
-
   recordContext = new AudioContext({sampleRate: SAMPLE_RATE, latencyHint: 'balanced'})
   await recordContext.resume()
 
@@ -65,11 +69,6 @@ const establish = () => {
   const query = Object.keys(TRANSCRIPT_PARAMS)
     .reduce((a, b) => a + '&' + b + '=' + TRANSCRIPT_PARAMS[b], '')
 
-  if (webSocket?.readyState === 1) {
-    webSocket.send('EOS')
-    webSocket.close()
-  }
-
   webSocket = new WebSocket(`${TRANSCRIPT_URL}?single=false${query}`)
   webSocket.addEventListener('message', function ({data}) {
     const parsed = JSON.parse(data)
@@ -82,7 +81,7 @@ const establish = () => {
 }
 
 const transcript = ({
-                      segment: index,
+                      segment: segIndex,
                       result: {
                         hypotheses,
                         final
@@ -90,7 +89,8 @@ const transcript = ({
                       'segment-start': start,
                       'total-length': end,
                     }) => {
-  if (index !== undefined) {
+  if (segIndex !== undefined) {
+    const index = segmentIndex + segIndex
     let segment = segments.querySelector(`#segment-${index}`)
     if (!segment) {
       segment = template.cloneNode(true)
@@ -99,12 +99,15 @@ const transcript = ({
         await play(index)
       })
       segments.append(segment)
+      segments.scrollTop = segments.scrollHeight
     }
 
     if (hypotheses) {
       const [{transcript}] = hypotheses
       const time = segment.querySelectorAll('time')
+      time[0].setAttribute('data-start', start)
       time[0].textContent = timeFormatter(start)
+      time[1].setAttribute('data-close', start)
       time[1].textContent = timeFormatter(end)
       segment.querySelector('p').textContent = transcript
     }
