@@ -42,7 +42,8 @@ main {
     border-radius: 0.4rem;
     flex-grow: 1;
     list-style: none;
-    margin-top: 1rem;
+    margin: 1rem 0 0;
+    padding: .5rem 0;
     overflow-y: auto;
 }
 
@@ -94,6 +95,11 @@ main {
 
 #segments p:focus {
     background-color: rgba(255, 255, 255, .15);
+}
+
+#segments p::selection {
+    background-color: #0005;
+    color: #fff;
 }
 
 

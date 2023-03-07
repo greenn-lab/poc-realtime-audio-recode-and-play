@@ -15,13 +15,26 @@ let recordContext
 let webSocket
 let recorder
 let chunks = []
+let closed = 0
+let closedTime
+let viaMouse
+let edited
 let player
 let playerSource
-let segmentIndex = 0
-
 
 btnRecord.addEventListener('click', () => {
-  if (recordContext?.readyState === 'running') {
+  if (recordContext?.state === 'running') {
+    const lastTime = document.getElementById(`segment-${chunks.length}`)?.querySelector('time')
+    if (lastTime && !lastTime.textContent) {
+      lastTime.setAttribute('data-start', closed)
+      lastTime.textContent = timeFormatter(closed)
+
+      closed += (Date.now() - closedTime) / 1000
+      lastTime.nextElementSibling.setAttribute('data-close', closed)
+      lastTime.nextElementSibling.textContent = timeFormatter(closed)
+    }
+
+    recorder.stop()
     recordContext.close()
     webSocket.send('EOS')
     webSocket.close()
@@ -81,41 +94,52 @@ const establish = () => {
 }
 
 const transcript = ({
-                      segment: segIndex,
                       result: {
                         hypotheses,
                         final
                       },
                       'segment-start': start,
-                      'total-length': end,
+                      'total-length': close,
                     }) => {
-  if (segIndex !== undefined) {
-    const index = segmentIndex + segIndex
-    let segment = segments.querySelector(`#segment-${index}`)
-    if (!segment) {
-      segment = template.cloneNode(true)
-      segment.id = `segment-${index}`
-      segment.querySelector('a').addEventListener('click', async () => {
-        await play(index)
-      })
-      segments.append(segment)
-      segments.scrollTop = segments.scrollHeight
-    }
+  const index = chunks.length
+  let segment = segments.querySelector(`#segment-${index}`)
+  if (!segment) {
+    segment = template.cloneNode(true)
+    segment.id = `segment-${index}`
+    segment.querySelector('a').addEventListener('click', async () => {
+      await play(index)
+    })
+    segment.addEventListener('focusout', () => {
+      edited = undefined
+    })
+    segment.addEventListener('focusin', ({target}) => {
+      console.log('focusin')
+      grab()
+      edited = target
+    })
 
-    if (hypotheses) {
-      const [{transcript}] = hypotheses
-      const time = segment.querySelectorAll('time')
-      time[0].setAttribute('data-start', start)
-      time[0].textContent = timeFormatter(start)
-      time[1].setAttribute('data-close', start)
-      time[1].textContent = timeFormatter(end)
-      segment.querySelector('p').textContent = transcript
-    }
+    segments.append(segment)
+    !edited && (segments.scrollTop = segments.scrollHeight)
+  }
 
-    if (final) {
-      recorder.stop()
-      recorder.start()
+  if (hypotheses) {
+    const [{transcript}] = hypotheses
+    const time = segment.querySelectorAll('time')
+    time[0].setAttribute('data-start', start)
+    time[0].textContent = timeFormatter(start)
+    time[1].setAttribute('data-close', close)
+    time[1].textContent = timeFormatter(close)
+    segment.querySelector('p').textContent = transcript
+
+    if (close) {
+      closed = close
+      closedTime = Date.now()
     }
+  }
+
+  if (final) {
+    recorder.stop()
+    recorder.start()
   }
 }
 
@@ -200,4 +224,19 @@ const play = async index => {
   playerSource = URL.createObjectURL(chunks[index])
   player = new Audio(playerSource)
   await player.play()
+}
+
+const grab = () => {
+  const selection = window.getSelection()
+  let {anchorNode: node, anchorOffset: start, focusOffset: close} = selection
+  if (node?.nodeType !== Node.TEXT_NODE || start !== close) return
+
+  while (/[^\wㄱ-힣,.?!~]/.test(node.textContent.charAt(start))) start--
+
+  console.log('start', start, close)
+  const [matched] = /[\wㄱ-힣]+[,.?!~]*/.exec(node.textContent.substring(start))
+  if (matched) {
+    console.log('matched', matched)
+    selection.setBaseAndExtent(node, start, node, start + matched.length)
+  }
 }
